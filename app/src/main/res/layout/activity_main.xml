@@ -9,6 +9,16 @@
     <com.linlif.linechart.view.LineChartView
         android:id="@+id/lineChart"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+        android:layout_height="wrap_content"
+        app:bgColorEnd="@android:color/white"
+        app:bgColorStart="@android:color/white"
+        app:dottedLineColor="@android:color/white"
+        app:dottedTextColor="@android:color/white"
+        app:gridLineColor="#E5E5E5"
+        app:lineColor="#FF631F"
+        app:textBold="false"
+        app:textColor="#313134"
+        app:verticalLineColor="#FF631F"
+        app:xyTextSize="10dp" />
 
 </LinearLayout>

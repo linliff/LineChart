@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <declare-styleable name="LineChart">
+
+        <attr name="bgColorStart" format="color|reference" />
+        <attr name="bgColorEnd" format="color|reference" />
+        <attr name="gridLineColor" format="color|reference" />
+        <attr name="lineColor" format="color|reference" />
+        <attr name="verticalLineColor" format="color|reference" />
+        <attr name="textColor" format="color|reference" />
+        <attr name="textBold" format="boolean" />
+        <attr name="xyTextSize" format="dimension" />
+        <attr name="dottedLineColor" format="color|reference" />
+        <attr name="dottedTextColor" format="color|reference" />
+
+    </declare-styleable>
+
+</resources>

@@ -1,6 +1,5 @@
 package com.linlif.linechart.view;
 
-import android.graphics.Color;
 import android.graphics.Paint;
 
 /**
@@ -10,10 +9,10 @@ public class GridLinePaint {
 
     private Paint gridPaint;
 
-    public GridLinePaint() {
+    public GridLinePaint(int color) {
 
         gridPaint = new Paint();
-        gridPaint.setColor(Color.parseColor("#FFFFFF"));
+        gridPaint.setColor(color);
         gridPaint.setStyle(Paint.Style.STROKE);
         gridPaint.setAntiAlias(true);
         gridPaint.setStrokeWidth(2);

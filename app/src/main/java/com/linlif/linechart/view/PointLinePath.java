@@ -1,6 +1,7 @@
 package com.linlif.linechart.view;
 
 import android.graphics.Color;
+import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Path;
 
@@ -10,25 +11,28 @@ import android.graphics.Path;
 public class PointLinePath {
 
     private Paint linePaint;
-    private Paint verticaLinePaint;
+    private Paint verticalLinePaint;
     private Paint strokePaint;
     private Paint fillPaint;
+    private Paint dottedLinePaint;
 
     private Path linePath;
 
-    public PointLinePath() {
+    public PointLinePath(int lineColor, int verticalLineColor) {
+
+        linePath = new Path();
 
         linePaint = new Paint();
-        linePaint.setColor(Color.parseColor("#FB0000"));
+        linePaint.setColor(lineColor);
         linePaint.setStyle(Paint.Style.STROKE);
         linePaint.setAntiAlias(true);
         linePaint.setStrokeWidth(5);
 
-        verticaLinePaint = new Paint();
-        verticaLinePaint.setColor(Color.parseColor("#FB0000"));
-        verticaLinePaint.setStyle(Paint.Style.STROKE);
-        verticaLinePaint.setAntiAlias(true);
-        verticaLinePaint.setStrokeWidth(3);
+        verticalLinePaint = new Paint();
+        verticalLinePaint.setColor(verticalLineColor);
+        verticalLinePaint.setStyle(Paint.Style.STROKE);
+        verticalLinePaint.setAntiAlias(true);
+        verticalLinePaint.setStrokeWidth(3);
 
         strokePaint = new Paint();
         strokePaint.setColor(Color.parseColor("#FB0000"));
@@ -40,7 +44,13 @@ public class PointLinePath {
         fillPaint.setColor(Color.parseColor("#FFF5EE"));
         fillPaint.setAntiAlias(true);
         fillPaint.setStyle(Paint.Style.FILL);
-        linePath = new Path();
+
+        dottedLinePaint = new Paint();
+        dottedLinePaint.setStyle(Paint.Style.STROKE);
+        dottedLinePaint.setAntiAlias(true);
+        dottedLinePaint.setStrokeWidth(5);
+        dottedLinePaint.setColor(lineColor);
+        dottedLinePaint.setPathEffect(new DashPathEffect(new float[]{15, 15}, 0));
 
     }
 
@@ -71,8 +81,8 @@ public class PointLinePath {
         return linePaint;
     }
 
-    public Paint getVerticaLinePaint() {
-        return verticaLinePaint;
+    public Paint getVerticalLinePaint() {
+        return verticalLinePaint;
     }
 
     public Paint getStrokePaint() {
@@ -82,5 +92,9 @@ public class PointLinePath {
 
     public Paint getFillPaint() {
         return fillPaint;
+    }
+
+    public Paint getDottedLinePaint() {
+        return dottedLinePaint;
     }
 }

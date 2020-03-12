@@ -48,7 +48,7 @@ public class MainActivity extends AppCompatActivity {
         data.add((float) 170);
 
 
-        lineChartView.setData(xdate, ydata, data);
+        lineChartView.setData(xdate, ydata, data, true, 0);
 
     }
 

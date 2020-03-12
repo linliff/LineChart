@@ -1,9 +1,14 @@
 package com.linlif.linechart.view;
 
+import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.PathMeasure;
 import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
@@ -11,7 +16,9 @@ import android.view.View;
 import android.view.ViewConfiguration;
 
 import com.linlif.linechart.DensityUtil;
+import com.linlif.linechart.ListUtil;
 import com.linlif.linechart.NumberUtil;
+import com.linlif.linechart.R;
 import com.linlif.linechart.Util;
 
 import java.util.ArrayList;
@@ -53,17 +60,18 @@ public class LineChartView extends View implements View.OnTouchListener {
     //每个单元格的长度
     private int xScale = (Util.getScreenWidth() - DensityUtil.dip2px(53f)) / 6;
 
+    private float yToXWeight = (float) 0.5;
     //每个单元格的高度
-    private int yScale = xScale / 2;
+    private int yScale = (int) (xScale * yToXWeight);
 
     //Y轴多出来的部分
-    private int yOffSet = yScale / 3;
-
-    //Y轴的长度
-    private int yLength = yScale * (horizontalLineSize - 1) + yOffSet * 2;
+    private int yOffSet = 0;
 
     //Y轴刻度的长度
     private int yNumLength = yScale * (horizontalLineSize - 1);
+
+    //Y轴的长度
+    private int yLength = yNumLength;
 
     //X轴的长度
     private int xLength = xScale * (verticalLine - 1);
@@ -81,7 +89,7 @@ public class LineChartView extends View implements View.OnTouchListener {
     private int startY = 0;
 
     //起始点距离边线的间距
-    private int pointEndInterval = DensityUtil.dip2px(13f);
+    private int pointEndInterval = 0;
 
     //手势滑动和点击位置
     private int touchPointX;
@@ -91,10 +99,33 @@ public class LineChartView extends View implements View.OnTouchListener {
     private float lineStartX;
     private float lineEndX;
 
+    //第一个有效数据的位置
+    int firstDataPosition;
+
     //折线点的圆形大小
     private float circleRadius = DensityUtil.dip2px(4f);
 
     private OnTouchMoveListener mListener;
+
+    private Path dst;
+    private float animatedValue;
+    private PathMeasure pathMeasure;
+    private ValueAnimator animator;
+
+    private boolean showMaxY;
+    private boolean showMinY;
+
+    //颜色配置
+    private int bgColorStart;
+    private int bgColorEnd;
+    private int lineColor;
+    private int verticalLineColor;
+    private int textColor;
+    private int dottedLineColor;
+    private int dottedTextColor;
+    private int gridLineColor;
+    private int textSize;
+    private boolean textBold;
 
     public LineChartView(Context context) {
         this(context, null);
@@ -102,15 +133,34 @@ public class LineChartView extends View implements View.OnTouchListener {
 
     public LineChartView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        init();
+        init(context, attrs);
     }
 
-    private void init() {
+    private void init(Context context, AttributeSet attrs) {
 
-        gridPaint = new GridLinePaint();
-        textPaint = new TextPaint();
-        linePath = new PointLinePath();
-        dottedLinePath = new DottedLinePath();
+        if (context != null && attrs != null) {
+            @SuppressLint("CustomViewStyleable")
+            TypedArray typedArray = context.obtainStyledAttributes(attrs, R.styleable.LineChart);
+            bgColorStart = typedArray.getColor(R.styleable.LineChart_bgColorStart, 0xFFFFFFFF);
+            bgColorEnd = typedArray.getColor(R.styleable.LineChart_bgColorEnd, 0xFFFFFFFF);
+            gridLineColor = typedArray.getColor(R.styleable.LineChart_gridLineColor, 0xFFFFFFFF);
+            lineColor = typedArray.getColor(R.styleable.LineChart_lineColor, 0xFFFFFFFF);
+            verticalLineColor = typedArray.getColor(R.styleable.LineChart_verticalLineColor, 0xFFFFFFFF);
+            textColor = typedArray.getColor(R.styleable.LineChart_textColor, 0xFFFFFFFF);
+            textSize = typedArray.getDimensionPixelSize(R.styleable.LineChart_xyTextSize, DensityUtil.dip2px(11f));
+            textBold = typedArray.getBoolean(R.styleable.LineChart_textBold, false);
+            dottedLineColor = typedArray.getColor(R.styleable.LineChart_dottedLineColor, 0xFFFFFFFF);
+            dottedTextColor = typedArray.getColor(R.styleable.LineChart_dottedTextColor, 0xFFFFFFFF);
+            typedArray.recycle();
+        }
+
+        gridPaint = new GridLinePaint(gridLineColor);
+        textPaint = new TextPaint(textColor, textSize, textBold);
+        linePath = new PointLinePath(lineColor, verticalLineColor);
+        dottedLinePath = new DottedLinePath(dottedLineColor, dottedTextColor);
+
+        dst = new Path();
+        pathMeasure = new PathMeasure();
 
         setOnTouchListener(this);
         setClickable(true);
@@ -193,15 +243,26 @@ public class LineChartView extends View implements View.OnTouchListener {
 
         //横线
         for (int i = 0; i < horizontalLineSize; i++) {
-            if (i != 0 && i != horizontalLineSize - 1) {
+
+            if (i == 0) {
+                canvas.drawLine(startX, startY, startX + xLength, startY, gridPaint.getGridPaint());
+            } else if (i == horizontalLineSize - 1) {
+                canvas.drawLine(startX, startY + i * yScale + yOffSet * 2, startX + xLength, startY + i * yScale + yOffSet * 2, gridPaint.getGridPaint());
+            } else {
                 canvas.drawLine(startX, startY + i * yScale + yOffSet, startX + xLength, startY + i * yScale + yOffSet, gridPaint.getGridPaint());
             }
         }
 
         //Y轴文本
-        for (int i = 0; i < YLabels.size() - 1; i++) {
+        for (int i = 0; i < YLabels.size(); i++) {
             String yLabel = String.valueOf(YLabels.get(i));
-            canvas.drawText(yLabel, startX - (yLabel.length() * yTextSpan + DensityUtil.dip2px(10f)), startY + yLength - (i * yScale + yOffSet) + yTextPadding, textPaint.getTextPaint());
+            if (!showMaxY && i == YLabels.size() - 1) {
+                //不显示Y轴最大值
+            } else if (!showMinY && i == 0) {
+                //不显示Y轴最小值
+            } else {
+                canvas.drawText(yLabel, startX - (yLabel.length() * yTextSpan + DensityUtil.dip2px(10f)), startY + yLength - (i * yScale + yOffSet) + yTextPadding, textPaint.getTextPaint());
+            }
 
         }
 
@@ -256,7 +317,9 @@ public class LineChartView extends View implements View.OnTouchListener {
 
                 String xLabel = XLabels.get(realPos);
 
-                if (realPos != 0) {
+                if (realPos == 0) {
+                    canvas.drawLine(xLine + pointEndInterval, startY, xLine + pointEndInterval, startY + yLength, gridPaint.getGridPaint());
+                } else {
                     canvas.drawLine(xLine, startY, xLine, startY + yLength, gridPaint.getGridPaint());
                 }
 
@@ -278,31 +341,35 @@ public class LineChartView extends View implements View.OnTouchListener {
         }
 
         Paint paint = new Paint();
-        LinearGradient backGradient = new LinearGradient(0, 0, 0, yLength, new int[]{0XFFFFFBFB, 0XFFFFE5D2}, null, Shader.TileMode.CLAMP);
+        LinearGradient backGradient = new LinearGradient(0, 0, 0, yLength, new int[]{bgColorStart, bgColorEnd}, null, Shader.TileMode.CLAMP);
         paint.setShader(backGradient);
-        canvas.drawRect(startX, 0, xLength + startX, yLength, paint);
+        canvas.drawRect(startX, startY, xLength + startX, yLength + startY, paint);
     }
 
     private void drawTouchLine(Canvas canvas, float xInterval) {
 
         int position = -1;
+        boolean isFirstDara = false;
 
         if (touchPointX == 0) {
             return;
         }
 
         if (touchPointX < lineStartX) {
-            drawPointCircle(canvas, XPoint.get(0), YPoint.get(0));
+            drawPointCircle(canvas, XPoint.get(firstDataPosition), YPoint.get(firstDataPosition));
             if (mListener != null) {
-                mListener.onTouchMove((int) lineStartX, startY, 0);
+                if (firstDataPosition > 0 && data.get(firstDataPosition - 1) <= 0) {
+                    isFirstDara = true;
+                }
+                mListener.onTouchMove((int) lineStartX, startY, firstDataPosition, isFirstDara);
             }
             return;
         }
 
         if (touchPointX > lineEndX) {
-            drawPointCircle(canvas, XPoint.get(XPoint.size() - 1), YPoint.get(YPoint.size() - 1));
+            drawPointCircle(canvas, ListUtil.getLastItem(XPoint), ListUtil.getLastItem(YPoint));
             if (mListener != null) {
-                mListener.onTouchMove((int) lineEndX, startY, XPoint.size() - 1);
+                mListener.onTouchMove((int) lineEndX, startY, XPoint.size() - 1, false);
             }
             return;
         }
@@ -312,6 +379,9 @@ public class LineChartView extends View implements View.OnTouchListener {
 
             if (XPoint.get(i) - xInterval < touchPointX && touchPointX < XPoint.get(i) + xInterval) {
                 position = i;
+                if (position > 0 && data.get(position - 1) <= 0) {
+                    isFirstDara = true;
+                }
                 drawPointCircle(canvas, XPoint.get(i), YPoint.get(i));
                 touchPointX = Math.round(XPoint.get(i));
                 break;
@@ -320,12 +390,12 @@ public class LineChartView extends View implements View.OnTouchListener {
         }
 
         if (mListener != null) {
-            mListener.onTouchMove(touchPointX, startY, position);
+            mListener.onTouchMove(touchPointX, startY, position, isFirstDara);
         }
     }
 
     private void drawPointCircle(Canvas canvas, Float x, Float y) {
-        canvas.drawLine(x, startY, x, startY + yLength, linePath.getVerticaLinePaint());
+        canvas.drawLine(x, startY, x, startY + yLength, linePath.getVerticalLinePaint());
         canvas.drawCircle(x, y, circleRadius, linePath.getStrokePaint());
         canvas.drawCircle(x, y, circleRadius, linePath.getFillPaint());
     }
@@ -335,6 +405,7 @@ public class LineChartView extends View implements View.OnTouchListener {
         if (canvas == null) {
             return;
         }
+
         float pointX = 0, pointY = 0; //每个价格点的坐标
 
         boolean isFirstPoint = false;
@@ -343,15 +414,17 @@ public class LineChartView extends View implements View.OnTouchListener {
         for (int i = 0; i < data.size(); i++) {
 
             pointX = startX + i * xInterval;
-            pointY = yOffSet + (max - data.get(i)) * yInterval;
+            pointY = yOffSet + startY + (max - data.get(i)) * yInterval;
 
             XPoint.add(pointX);
             YPoint.add(pointY);
 
             if (data.get(i) != 0 && !isFirstPoint) {//设置折线起点
                 isFirstPoint = true;
+                firstDataPosition = i;
                 lineStartX = pointX;
                 linePath.moveTo(pointX, pointY);
+                canvas.drawLine(startX, pointY, pointX, pointY, linePath.getDottedLinePaint());
             } else if (i == data.size() - 1 && data.get(i) != 0) {
                 linePath.lineTo(pointX, pointY);
                 lineEndX = pointX;
@@ -363,24 +436,29 @@ public class LineChartView extends View implements View.OnTouchListener {
 
         //绘制折线
         if (linePath.getLinePath() != null) {
-            canvas.drawPath(linePath.getLinePath(), linePath.getLinePaint());
+//            canvas.drawPath(linePath.getLinePath(), linePath.getLinePaint());
+
+            pathMeasure.setPath(linePath.getLinePath(), false);
+            pathMeasure.getSegment(0, animatedValue * pathMeasure.getLength(), dst, true);
+            canvas.drawPath(dst, linePath.getLinePaint());
+
+            dst.reset();
             linePath.getLinePath().reset();
 
-            if (touchPointX == 0) {
-                String text = NumberUtil.formartPointTwoZero(data.get(data.size() - 1));
+        }
+        if (touchPointX == 0) {
+            String text = NumberUtil.formartPointTwoZero(ListUtil.getLastItem(data));
 
-                float diffY = pointY - startY;
-                int xOff = 8;
-                if (text.length() > 5) {
-                    xOff = 11;
-                }
-                if (diffY < 50) {
-                    canvas.drawText(text, pointX - text.length() * xOff, pointY + 50, textPaint.getTextPaint());
-                } else {
-                    canvas.drawText(text, pointX - text.length() * xOff, pointY - 20, textPaint.getTextPaint());
-                }
+            float diffY = pointY - startY;
+            int xOff = 8;
+            if (text.length() > 5) {
+                xOff = 11;
             }
-
+            if (diffY < 50) {
+                canvas.drawText(text, pointX - text.length() * xOff, pointY + 50, textPaint.getTextPaint());
+            } else {
+                canvas.drawText(text, pointX - text.length() * xOff, pointY - 20, textPaint.getTextPaint());
+            }
         }
 
         //绘制参考价虚线
@@ -398,8 +476,10 @@ public class LineChartView extends View implements View.OnTouchListener {
             canvas.drawLine(startX, dottedPointY, startX + xLength - pointEndInterval, dottedPointY, dottedLinePath.getDottedLinePaint());
         }
 
-        canvas.drawCircle(pointX, pointY, circleRadius, linePath.getStrokePaint());
-        canvas.drawCircle(pointX, pointY, circleRadius, linePath.getFillPaint());
+        if (touchPointX == 0) {
+            canvas.drawCircle(pointX, pointY, circleRadius, linePath.getStrokePaint());
+            canvas.drawCircle(pointX, pointY, circleRadius, linePath.getFillPaint());
+        }
 
     }
 
@@ -423,25 +503,91 @@ public class LineChartView extends View implements View.OnTouchListener {
         this.dottedDesc = dottedDesc;
     }
 
-    public void setData(List<String> XLabels, List<Integer> YLabels, List<Float> data) {
+    public void setyOffSet(int yOffSet) {
 
-        if (XLabels != null) {
+        this.yOffSet = yOffSet;
+        this.yLength = yNumLength + yOffSet * 2;
+    }
+
+    public void setyToXWeight(float yToXWeight) {
+        this.yToXWeight = yToXWeight;
+        this.yScale = (int) (xScale * yToXWeight);
+        this.yNumLength = yScale * (horizontalLineSize - 1);
+        this.yLength = yNumLength + yOffSet * 2;
+    }
+
+    public int getStartY() {
+
+        return startY;
+    }
+
+    public void setShowMaxY(boolean showMaxY) {
+        this.showMaxY = showMaxY;
+    }
+
+    public void setShowMinY(boolean showMinY) {
+        this.showMinY = showMinY;
+    }
+
+    public void setPointEndInterval(int pointEndInterval) {
+        this.pointEndInterval = pointEndInterval;
+    }
+
+    public void setStartY(int startY) {
+        this.startY = startY;
+    }
+
+    public void setData(List<String> XLabels, List<Integer> YLabels, List<Float> data, boolean needAnimator, int touchPointX) {
+
+        if (!ListUtil.isEmpty(XLabels)) {
             this.XLabels.clear();
             this.XLabels.addAll(XLabels);
         }
 
-        if (YLabels != null) {
+        if (!ListUtil.isEmpty(YLabels)) {
             this.YLabels.clear();
             this.YLabels.addAll(YLabels);
         }
 
-        if (data != null) {
+        if (!ListUtil.isEmpty(data)) {
             this.data.clear();
             this.data.addAll(data);
         }
 
-        touchPointX = 0;
-        invalidate();
+        this.touchPointX = touchPointX;
+
+        if (needAnimator) {
+            initAnimator();
+        } else {
+            animatedValue = 1;
+            invalidate();
+        }
+
+    }
+
+    private void initAnimator() {
+
+        abortAnimator();
+
+        animator = ValueAnimator.ofFloat(0, 1);
+        animator.setDuration(1000);
+        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                animatedValue = (float) animation.getAnimatedValue();
+                LineChartView.this.invalidate();
+            }
+        });
+        animator.start();
+    }
+
+    public void abortAnimator() {
+
+        if (animator != null) {
+            animator.cancel();
+            animator = null;
+        }
+
     }
 
     public float getStartX() {
@@ -454,7 +600,7 @@ public class LineChartView extends View implements View.OnTouchListener {
 
     public interface OnTouchMoveListener {
 
-        void onTouchMove(int x, int y, int position);
+        void onTouchMove(int x, int y, int position, boolean isFirstData);
 
         void onTouchEvent(MotionEvent event);
     }
